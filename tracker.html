@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discipline Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <strong>Semaine :</strong>
+    <select id="weekSelect"></select>
+  </div>
+  <button id="darkToggle">🌙 Mode sombre</button>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard">
+
+  <!-- LEFT CARD : QUOTE + NOTES -->
+  <div class="card">
+    <div class="quote">“L’inspiration vient seulement pendant le travail.”</div>
+    <div class="sub">Notes personnelles</div>
+    <textarea id="notes" placeholder="Écris ici tes pensées, objectifs, idées, ce que tu veux…"></textarea>
+  </div>
+
+  <!-- RIGHT CARD : HABITS -->
+  <div class="card">
+    <h3>Habitudes</h3>
+    <table id="habitsTable">
+      <thead>
+        <tr>
+          <th>Habitude</th>
+          <th></th>
+          <th>Dim</th><th>Lun</th><th>Mar</th><th>Mer</th>
+          <th>Jeu</th><th>Ven</th><th>Sam</th>
+          <th>%</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button id="addHabit">+ Ajouter une habitude</button>
+  </div>
+
+</div>
+
+<!-- DAYS / TASKS -->
+<div class="days" id="days"></div>
+
+<script>
+/**************** CONSTANTES ****************/
+const DAYS = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+
+/**************** DATA ****************/
+let store = JSON.parse(localStorage.getItem('tracker-clean-base')) || {
+  week: 1,
+  weeks: {}
+};
+
+function getWeek(){
+  if(!store.weeks[store.week]){
+    store.weeks[store.week] = {
+      notes: '',
+      habits: ['Se lever tôt','Sport','Devoirs','Limiter réseaux','Lecture','Projet perso'],
+      habitChecks: {},
+      tasks: {}
+    };
+  }
+  return store.weeks[store.week];
+}
+
+function save(){
+  localStorage.setItem('tracker-clean-base', JSON.stringify(store));
+}
+
+/**************** TOP BAR ****************/
+const weekSelect = document.getElementById('weekSelect');
+for(let i=1;i<=12;i++){
+  const opt = document.createElement('option');
+  opt.value = i;
+  opt.textContent = 'Semaine ' + i;
+  weekSelect.appendChild(opt);
+}
+weekSelect.value = store.week;
+weekSelect.onchange = e => {
+  store.week = Number(e.target.value);
+  loadWeek();
+};
+
+document.getElementById('darkToggle').onclick = () => {
+  document.body.classList.toggle('dark');
+};
+
+/**************** NOTES ****************/
+const notesEl = document.getElementById('notes');
+notesEl.addEventListener('input', () => {
+  getWeek().notes = notesEl.value;
+  save();
+});
+
+function loadNotes(){
+  notesEl.value = getWeek().notes || '';
+}
+
+/**************** HABITS ****************/
+function renderHabits(){
+  const w = getWeek();
+  const tbody = document.querySelector('#habitsTable tbody');
+  tbody.innerHTML = '';
+
+  w.habits.forEach((h, hi) => {
+    let done = 0;
+
+    const dayCells = DAYS.map((_, di) => {
+      const key = `h${hi}d${di}`;
+      if(w.habitChecks[key]) done++;
+      return `<td><input type="checkbox" ${w.habitChecks[key]?'checked':''} onchange="toggleHabit('${key}')"></td>`;
+    }).join('');
+
+    const pct = Math.round(done / 7 * 100);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input value="${h}" onchange="renameHabit(${hi}, this.value)"></td>
+      <td><span class="hremove" onclick="removeHabit(${hi})">✕</span></td>
+      ${dayCells}
+      <td>${pct}% ${pct === 100 ? '🏆' : ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function addHabit(){
+  getWeek().habits.push('Nouvelle habitude');
+  save(); renderHabits();
+}
+
+function renameHabit(i,v){ getWeek().habits[i]=v; save(); }
+function removeHabit(i){ if(confirm('Supprimer cette habitude ?')){ getWeek().habits.splice(i,1); save(); renderHabits(); }}
+function toggleHabit(k){ getWeek().habitChecks[k]=!getWeek().habitChecks[k]; save(); renderHabits(); }
+
+/**************** TASKS ****************/
+function renderDays(){
+  const w = getWeek();
+  const cont = document.getElementById('days');
+  cont.innerHTML = '';
+
+  DAYS.forEach((d, di) => {
+    const t = w.tasks[di] || [];
+    const done = t.filter(x=>x.done).length;
+    const pct = t.length ? Math.round(done/t.length*100) : 0;
+
+    cont.innerHTML += `
+      <div class="day">
+        <h3>${d}</h3>
+        <div class="tasks">
+          ${t.map((x,i)=>`
+            <div class="task">
+              <input type="checkbox" ${x.done?'checked':''} onchange="toggleTask(${di},${i})">
+              <input value="${x.text}" onchange="editTask(${di},${i},this.value)">
+              <span class="remove" onclick="removeTask(${di},${i})">✕</span>
+            </div>`).join('')}
+        </div>
+        <button onclick="addTask(${di})">+ Ajouter tâche</button>
+        <div class="percent">${pct}%</div>
+      </div>`;
+  });
+}
+
+function addTask(d){ const w=getWeek(); if(!w.tasks[d]) w.tasks[d]=[]; w.tasks[d].push({text:'Nouvelle tâche',done:false}); save(); renderDays(); }
+function toggleTask(d,i){ getWeek().tasks[d][i].done=!getWeek().tasks[d][i].done; save(); renderDays(); }
+function editTask(d,i,v){ getWeek().tasks[d][i].text=v; save(); }
+function removeTask(d,i){ getWeek().tasks[d].splice(i,1); save(); renderDays(); }
+
+/**************** LOAD ****************/
+function loadWeek(){
+  loadNotes();
+  renderHabits();
+  renderDays();
+}
+
+loadWeek();
+
+document.getElementById('addHabit').onclick = addHabit;
+</script>
+
+</body>
+</html>
